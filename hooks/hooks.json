@@ -1,35 +1,27 @@
 {
-  "PreCompact": [
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "prompt",
-          "prompt": "You are about to compact due to context pressure. Before compaction proceeds, you MUST save a structured checkpoint to .claude/handshake/checkpoint.json (the machine-readable authority) and .claude/handshake/checkpoint.md (human-readable summary). Read the config at .claude/handshake/config.json first to confirm handshake is enabled. If not enabled, do nothing.\n\nCheckpoint JSON structure (write exactly this format to checkpoint.json):\n{\n  \"version\": \"1.0\",\n  \"timestamp\": \"ISO8601 timestamp\",\n  \"source\": \"precompact\",\n  \"objective\": \"what you are trying to accomplish\",\n  \"phase\": \"current phase (e.g., implementation, testing, review)\",\n  \"currentPlan\": \"the plan or approach being followed\",\n  \"filesTouched\": [\"list\", \"of\", \"files\", \"modified\"],\n  \"activeFiles\": [\"files\", \"currently\", \"open\"],\n  \"commandsRun\": [\"commands\", \"executed\"],\n  \"pendingCommands\": [\"commands\", \"planned\"],\n  \"decisionsMade\": [{\"decision\": \"what was decided\", \"reason\": \"why\"}],\n  \"completedSteps\": [\"steps\", \"finished\"],\n  \"unresolvedTodos\": [\"items\", \"remaining\"],\n  \"testStatus\": \"none|passing|failing|unknown\",\n  \"verificationRequired\": [\"what\", \"needs\", \"verifying\"],\n  \"risks\": [\"potential\", \"risks\"],\n  \"failedAttempts\": [{\"attempt\": \"what was tried\", \"reason\": \"why it failed\"}],\n  \"assumptions\": [\"current\", \"assumptions\"],\n  \"nextAction\": \"exact next step to take after compaction\",\n  \"handoffMode\": \"auto|ask\",\n  \"resumeSafety\": {\n    \"repoChanged\": false,\n    \"stale\": false,\n    \"unresolvedRisks\": false,\n    \"destructiveNextAction\": false,\n    \"ambiguousTask\": false,\n    \"reasons\": [\"list\", \"of\", \"safety\", \"flags\"]\n  },\n  \"repoState\": {\n    \"branch\": \"current branch\",\n    \"commit\": \"current commit hash\",\n    \"dirty\": true\n  }\n}\n\nAlso update .claude/handshake/config.json lastCheckpoint timestamp. After saving, briefly confirm: 'Checkpoint saved before compaction.'"
-        }
-      ]
-    }
-  ],
-  "SessionStart": [
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "prompt",
-          "prompt": "Session started. Check if .claude/handshake/config.json exists and enabled is true. If not enabled or config missing, do nothing.\n\nIf enabled: Read .claude/handshake/checkpoint.json. If it does not exist, do nothing.\n\nEvaluate resume safety from the checkpoint's resumeSafety field and repoState. Check if repo state changed (different branch, commit, or dirty status) using git commands. Check if checkpoint is stale (>24h based on config stalenessHours).\n\nIf safe to auto-resume (resumeSafety has no blocking flags, repo unchanged, not stale):\n- Provide a brief reorientation: objective, phase, next action.\n- Continue with the next action silently.\n\nIf resume needs confirmation (risks, stale, repo changed, destructive action):\n- Summarize: objective, phase, next action, and WHY confirmation is needed.\n- Ask: 'Resume this task?' with the context.\n\nAfter resuming (auto or confirmed), do NOT re-save the checkpoint — wait for the next PreCompact or /clear event."
-        }
-      ]
-    }
-  ],
-  "UserPromptSubmit": [
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "prompt",
-          "prompt": "Check if the user's submitted prompt is exactly '/clear'. If not, do nothing.\n\nIf the prompt is '/clear':\n1. Read .claude/handshake/config.json to check if handshake is enabled.\n2. If NOT enabled, do nothing (normal /clear behavior).\n3. If enabled: Save a checkpoint to .claude/handshake/checkpoint.json and checkpoint.md BEFORE the /clear executes. Use the same checkpoint JSON structure as PreCompact (source: \"clear\").\n4. After saving, confirm: 'Checkpoint saved before /clear. Context will be restored on next prompt.'\n\nNote: This is best-effort. If UserPromptSubmit does not block until you respond, the /clear may execute before the checkpoint saves. Test this behavior."
-        }
-      ]
+  "description": "Handshake hooks for context continuity across compaction and /clear events",
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You are about to compact due to context pressure. Before compaction proceeds, you MUST save a structured checkpoint to .claude/handshake/checkpoint.json (the machine-readable authority) and .claude/handshake/checkpoint.md (human-readable summary). Read the config at .claude/handshake/config.json first to confirm handshake is enabled. If not enabled, do nothing.\n\nCheckpoint JSON structure (write exactly this format to checkpoint.json):\n{\n  \"version\": \"1.0\",\n  \"timestamp\": \"ISO8601 timestamp\",\n  \"source\": \"precompact\",\n  \"objective\": \"what you are trying to accomplish\",\n  \"phase\": \"current phase (e.g., implementation, testing, review)\",\n  \"currentPlan\": \"the plan or approach being followed\",\n  \"filesTouched\": [\"list\", \"of\", \"files\", \"modified\"],\n  \"activeFiles\": [\"files\", \"currently\", \"open\"],\n  \"commandsRun\": [\"commands\", \"executed\"],\n  \"pendingCommands\": [\"commands\", \"planned\"],\n  \"decisionsMade\": [{\"decision\": \"what was decided\", \"reason\": \"why\"}],\n  \"completedSteps\": [\"steps\", \"finished\"],\n  \"unresolvedTodos\": [\"items\", \"remaining\"],\n  \"testStatus\": \"none|passing|failing|unknown\",\n  \"verificationRequired\": [\"what\", \"needs\", \"verifying\"],\n  \"risks\": [\"potential\", \"risks\"],\n  \"failedAttempts\": [{\"attempt\": \"what was tried\", \"reason\": \"why it failed\"}],\n  \"assumptions\": [\"current\", \"assumptions\"],\n  \"nextAction\": \"exact next step to take after compaction\",\n  \"handoffMode\": \"auto|ask\",\n  \"resumeSafety\": {\n    \"repoChanged\": false,\n    \"stale\": false,\n    \"unresolvedRisks\": false,\n    \"destructiveNextAction\": false,\n    \"ambiguousTask\": false,\n    \"reasons\": [\"list\", \"of\", \"safety\", \"flags\"]\n  },\n  \"repoState\": {\n    \"branch\": \"current branch\",\n    \"commit\": \"current commit hash\",\n    \"dirty\": true\n  }\n}\n\nAlso update .claude/handshake/config.json lastCheckpoint timestamp. After saving, briefly confirm: 'Checkpoint saved before compaction.'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+          "prompt": "Session started. Check if .claude/handshake/config.json exists and enabled is true. If not enabled or config missing, do nothing.\n\nIf enabled: Read .claude/handshake/checkpoint.json. If it does not exist, do nothing.\n\nYou MUST now rehydrate the agent context from this checkpoint. Do the following:\n1. Read the checkpoint.json file completely.\n2. Output a clear reorientation briefing using this exact format:\n\n---\nCONTEXT RECOVERY (Handshake)\nObjective: [from checkpoint.objective]\nPhase: [from checkpoint.phase]\nNext Action: [from checkpoint.nextAction]\nPlan: [from checkpoint.currentPlan]\nFiles Touched: [list from checkpoint.filesTouched]\nDecisions Made: [list from checkpoint.decisionsMade]\nCompleted Steps: [list from checkpoint.completedSteps]\nUnresolved TODOs: [list from checkpoint.unresolvedTodos]\n---\n\n3. Evaluate resume safety from checkpoint.resumeSafety and checkpoint.repoState. Check if repo state changed (different branch, commit, or dirty status) using git commands. Check if checkpoint is stale (>24h based on config stalenessHours in .claude/handshake/config.json).\n\n4. If safe to auto-resume (resumeSafety has no blocking flags, repo unchanged, not stale):\n- You have already provided the reorientation above.\n- Continue with the next action silently.\n\n5. If resume needs confirmation (risks, stale, repo changed, destructive action):\n- You already provided the reorientation above.\n- Summarize why confirmation is needed.\n- Ask: 'Resume this task?' with the context.\n\n6. AFTER resuming (auto or confirmed), DELETE the checkpoint files to clean up:\n- Use Bash tool to remove .claude/handshake/checkpoint.json and .claude/handshake/checkpoint.md\n- This ensures temp files are cleaned up after successful handoff.\n\n7. Do NOT re-save the checkpoint — wait for the next PreCompact or /clear event."
+          }
+        ]
     }
   ]
+}
 }

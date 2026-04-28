@@ -7,5 +7,6 @@
     "email": "bamn@users.noreply.github.com"
   },
   "license": "MIT",
-  "keywords": ["context", "continuity", "checkpoint", "resume", "workflow"]
+  "keywords": ["context", "continuity", "checkpoint", "resume", "workflow"],
+  "skills": "./skills"
 }

@@ -1,0 +1,11 @@
+{
+  "name": "handshake",
+  "version": "0.1.0",
+  "description": "Context-continuity plugin that checkpoints agent state before compaction or /clear, and rehydrates after context reset for seamless workflow resumption.",
+  "author": {
+    "name": "bamn",
+    "email": "bamn@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "keywords": ["context", "continuity", "checkpoint", "resume", "workflow"]
+}

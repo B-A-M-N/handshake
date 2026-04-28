@@ -1,5 +1,5 @@
 {
-  "description": "Handshake hooks for context continuity across compaction and /clear events",
+  "description": "Handshake hooks for context transport across /clear and compaction",
   "hooks": {
     "PreCompact": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "You are about to compact due to context pressure. Before compaction proceeds, you MUST save a structured checkpoint to .claude/handshake/checkpoint.json (the machine-readable authority) and .claude/handshake/checkpoint.md (human-readable summary). Read the config at .claude/handshake/config.json first to confirm handshake is enabled. If not enabled, do nothing.\n\nCheckpoint JSON structure (write exactly this format to checkpoint.json):\n{\n  \"version\": \"1.0\",\n  \"timestamp\": \"ISO8601 timestamp\",\n  \"source\": \"precompact\",\n  \"objective\": \"what you are trying to accomplish\",\n  \"phase\": \"current phase (e.g., implementation, testing, review)\",\n  \"currentPlan\": \"the plan or approach being followed\",\n  \"filesTouched\": [\"list\", \"of\", \"files\", \"modified\"],\n  \"activeFiles\": [\"files\", \"currently\", \"open\"],\n  \"commandsRun\": [\"commands\", \"executed\"],\n  \"pendingCommands\": [\"commands\", \"planned\"],\n  \"decisionsMade\": [{\"decision\": \"what was decided\", \"reason\": \"why\"}],\n  \"completedSteps\": [\"steps\", \"finished\"],\n  \"unresolvedTodos\": [\"items\", \"remaining\"],\n  \"testStatus\": \"none|passing|failing|unknown\",\n  \"verificationRequired\": [\"what\", \"needs\", \"verifying\"],\n  \"risks\": [\"potential\", \"risks\"],\n  \"failedAttempts\": [{\"attempt\": \"what was tried\", \"reason\": \"why it failed\"}],\n  \"assumptions\": [\"current\", \"assumptions\"],\n  \"nextAction\": \"exact next step to take after compaction\",\n  \"handoffMode\": \"auto|ask\",\n  \"resumeSafety\": {\n    \"repoChanged\": false,\n    \"stale\": false,\n    \"unresolvedRisks\": false,\n    \"destructiveNextAction\": false,\n    \"ambiguousTask\": false,\n    \"reasons\": [\"list\", \"of\", \"safety\", \"flags\"]\n  },\n  \"repoState\": {\n    \"branch\": \"current branch\",\n    \"commit\": \"current commit hash\",\n    \"dirty\": true\n  }\n}\n\nAlso update .claude/handshake/config.json lastCheckpoint timestamp. After saving, briefly confirm: 'Checkpoint saved before compaction.'"
+            "prompt": "You are about to compact due to context pressure. Read .claude/handshake/config.json to confirm handshake is enabled. If not enabled, do nothing.\n\nIf enabled: You MUST save a complete, fully-populated checkpoint to .claude/handshake/checkpoint.json (machine-readable) and .claude/handshake/checkpoint.md (human-readable).\n\nMANDATORY CHECKPOINT FIELDS — populate ALL from your current session state:\n1. objective: What the user asked you to accomplish\n2. phase: Current phase (implementation, testing, review, etc.)\n3. currentPlan: The plan or approach being followed\n4. filesTouched: ALL files modified this session\n5. activeFiles: Files currently relevant\n6. commandsRun: ALL bash/git commands executed\n7. pendingCommands: Commands planned but not yet run\n8. decisionsMade: Key decisions with reasons\n9. completedSteps: Steps finished this session\n10. unresolvedTodos: TODO items remaining\n11. testStatus: none|passing|failing|unknown\n12. verificationRequired: What needs verifying\n13. risks: Potential risks identified\n14. failedAttempts: What was tried and why it failed\n15. assumptions: Current assumptions\n16. nextAction: EXACT next step to take after compaction\n17. handoffMode: \"auto\" or \"ask\"\n18. resumeSafety: Object with boolean flags (repoChanged, stale, unresolvedRisks, destructiveNextAction, ambiguousTask, reasons)\n19. repoState: Current branch, commit hash (use git commands), dirty status\n\nWrite this EXACT JSON structure to .claude/handshake/checkpoint.json, then create .claude/handshake/checkpoint.md summary.\nAfter saving, confirm: 'Checkpoint saved before compaction with full context.'\n\nThe system will compact. On next session start, SessionStart hook will rehydrate ALL this context."
           }
         ]
       }
@@ -17,11 +17,22 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "prompt",
-          "prompt": "Session started. Check if .claude/handshake/config.json exists and enabled is true. If not enabled or config missing, do nothing.\n\nIf enabled: Read .claude/handshake/checkpoint.json. If it does not exist, do nothing.\n\nYou MUST now rehydrate the agent context from this checkpoint. Do the following:\n1. Read the checkpoint.json file completely.\n2. Output a clear reorientation briefing using this exact format:\n\n---\nCONTEXT RECOVERY (Handshake)\nObjective: [from checkpoint.objective]\nPhase: [from checkpoint.phase]\nNext Action: [from checkpoint.nextAction]\nPlan: [from checkpoint.currentPlan]\nFiles Touched: [list from checkpoint.filesTouched]\nDecisions Made: [list from checkpoint.decisionsMade]\nCompleted Steps: [list from checkpoint.completedSteps]\nUnresolved TODOs: [list from checkpoint.unresolvedTodos]\n---\n\n3. Evaluate resume safety from checkpoint.resumeSafety and checkpoint.repoState. Check if repo state changed (different branch, commit, or dirty status) using git commands. Check if checkpoint is stale (>24h based on config stalenessHours in .claude/handshake/config.json).\n\n4. If safe to auto-resume (resumeSafety has no blocking flags, repo unchanged, not stale):\n- You have already provided the reorientation above.\n- Continue with the next action silently.\n\n5. If resume needs confirmation (risks, stale, repo changed, destructive action):\n- You already provided the reorientation above.\n- Summarize why confirmation is needed.\n- Ask: 'Resume this task?' with the context.\n\n6. AFTER resuming (auto or confirmed), DELETE the checkpoint files to clean up:\n- Use Bash tool to remove .claude/handshake/checkpoint.json and .claude/handshake/checkpoint.md\n- This ensures temp files are cleaned up after successful handoff.\n\n7. Do NOT re-save the checkpoint — wait for the next PreCompact or /clear event."
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start-hook.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
           }
         ]
-    }
-  ]
-}
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-hook.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
+          }
+        ]
+      }
+    ]
+  }
 }

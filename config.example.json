@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "checkpointThreshold": 0,
+  "stalenessHours": 24,
+  "lastCheckpoint": null,
+  "transportVersion": "2.0"
+}

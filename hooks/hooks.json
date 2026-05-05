@@ -1,13 +1,24 @@
 {
-  "description": "Handshake hooks for context transport across /clear and compaction",
+  "description": "Handshake hooks — monitor maintains state, hooks inject state, commands expose state.",
   "hooks": {
     "PreCompact": [
       {
         "matcher": "",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "You are about to compact due to context pressure. Read .claude/handshake/config.json to confirm handshake is enabled. If not enabled, do nothing.\n\nIf enabled: You MUST save a complete, fully-populated checkpoint to .claude/handshake/checkpoint.json (machine-readable) and .claude/handshake/checkpoint.md (human-readable).\n\nMANDATORY CHECKPOINT FIELDS — populate ALL from your current session state:\n1. objective: What the user asked you to accomplish\n2. phase: Current phase (implementation, testing, review, etc.)\n3. currentPlan: The plan or approach being followed\n4. filesTouched: ALL files modified this session\n5. activeFiles: Files currently relevant\n6. commandsRun: ALL bash/git commands executed\n7. pendingCommands: Commands planned but not yet run\n8. decisionsMade: Key decisions with reasons\n9. completedSteps: Steps finished this session\n10. unresolvedTodos: TODO items remaining\n11. testStatus: none|passing|failing|unknown\n12. verificationRequired: What needs verifying\n13. risks: Potential risks identified\n14. failedAttempts: What was tried and why it failed\n15. assumptions: Current assumptions\n16. nextAction: EXACT next step to take after compaction\n17. handoffMode: \"auto\" or \"ask\"\n18. resumeSafety: Object with boolean flags (repoChanged, stale, unresolvedRisks, destructiveNextAction, ambiguousTask, reasons)\n19. repoState: Current branch, commit hash (use git commands), dirty status\n\nWrite this EXACT JSON structure to .claude/handshake/checkpoint.json, then create .claude/handshake/checkpoint.md summary.\nAfter saving, confirm: 'Checkpoint saved before compaction with full context.'\n\nThe system will compact. On next session start, SessionStart hook will rehydrate ALL this context."
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/precompact-check.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/userprompt-resume.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
           }
         ]
       }
@@ -23,13 +34,13 @@
         ]
       }
     ],
-    "PostToolUse": [
+    "SessionEnd": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-hook.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/sessionend-finalize.sh\" 2>> \"${CLAUDE_PROJECT_DIR:-.}/.claude/handshake/hook-errors.log\""
           }
         ]
       }

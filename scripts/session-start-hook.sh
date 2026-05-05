@@ -1,101 +1,99 @@
 #!/bin/bash
-# session-start-hook.sh — Context Transport Layer for Handshake
-# Injects transported context from checkpoint.json back into agent's working memory.
+# ============================================================================
+# session-start-hook.sh — Opportunistic SessionStart hook (bonus path).
+#
+# Restores mode from config.json after /clear so mode persists across
+# the total session. Enforces mutual exclusivity: compact XOR pass.
+#
+# This is a NON-authoritative resume path. The primary resume mechanism is
+# UserPromptSubmit. SessionStart reinjection can silently discard
+# additionalContext in some Claude Code versions, so this is best-effort only.
+#
+# If you need guaranteed resume, use /handshake resume instead.
+# ============================================================================
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-CHECKPOINT_FILE="$PROJECT_DIR/.claude/handshake/checkpoint.json"
-CONFIG_FILE="$PROJECT_DIR/.claude/handshake/config.json"
+HANDSHAKE_DIR="$PROJECT_DIR/.claude/handshake"
+RUNTIME_FILE="$HANDSHAKE_DIR/runtime.json"
+CONFIG_FILE="$HANDSHAKE_DIR/config.json"
+CHECKPOINT_FILE="$HANDSHAKE_DIR/checkpoint.json"
 
 # Check if enabled
 if [ ! -f "$CONFIG_FILE" ]; then
     exit 0
 fi
 
-ENABLED=$(python3 -c "import sys,json; d=json.load(open('$CONFIG_FILE')); print('true' if d.get('enabled',False) else 'false')" 2>/dev/null)
+python3 << 'PYEOF'
+import json, os, sys
 
-if [ "$ENABLED" != "true" ]; then
-    exit 0
-fi
+project_dir = os.environ.get("CLAUDE_PROJECT_DIR", ".")
+handshake_dir = os.path.join(project_dir, ".claude", "handshake")
+runtime_file = os.path.join(handshake_dir, "runtime.json")
+config_file = os.path.join(handshake_dir, "config.json")
+checkpoint_file = os.path.join(handshake_dir, "checkpoint.json")
 
-# Check if transport payload exists
-if [ ! -f "$CHECKPOINT_FILE" ]; then
-    exit 0
-fi
-
-# Output transport payload for agent rehydration
-echo "=== HANDSHAKE CONTEXT TRANSPORT (v2.0) ==="
-echo "Transport payload loaded from: $CHECKPOINT_FILE"
-echo ""
-
-python3 <<'PYEOF'
-import json, sys, os
 try:
-    checkpoint = json.load(open(sys.argv[1]))
-    
-    print("## Transport Metadata")
-    print(f"Version: {checkpoint.get('version', 'N/A')}")
-    print(f"Transported At: {checkpoint.get('transportedAt', 'N/A')}")
-    print(f"Session ID: {checkpoint.get('sessionId', 'N/A')}")
-    print(f"Source: {checkpoint.get('source', 'unknown')}")
-    print("")
-    
-    print("## Core Context")
-    print(f"Objective: {checkpoint.get('objective', 'N/A')}")
-    print(f"Phase: {checkpoint.get('phase', 'N/A')}")
-    print(f"Next Action: {checkpoint.get('nextAction', 'N/A')}")
-    print(f"Current Plan: {checkpoint.get('currentPlan', 'N/A')}")
-    print("")
-    
-    print("## Work State")
-    print(f"Files Touched: {checkpoint.get('filesTouched', [])}")
-    print(f"Active Files: {checkpoint.get('activeFiles', [])}")
-    print(f"Commands Run: {checkpoint.get('commandsRun', [])}")
-    print(f"Pending Commands: {checkpoint.get('pendingCommands', [])}")
-    print("")
-    
-    print("## Progress")
-    print(f"Decisions Made: {checkpoint.get('decisionsMade', [])}")
-    print(f"Completed Steps: {checkpoint.get('completedSteps', [])}")
-    print(f"Unresolved TODOs: {checkpoint.get('unresolvedTodos', [])}")
-    print("")
-    
-    print("## Quality & Safety")
-    print(f"Test Status: {checkpoint.get('testStatus', 'unknown')}")
-    print(f"Verification Required: {checkpoint.get('verificationRequired', [])}")
-    print(f"Risks: {checkpoint.get('risks', [])}")
-    print(f"Failed Attempts: {checkpoint.get('failedAttempts', [])}")
-    print(f"Assumptions: {checkpoint.get('assumptions', [])}")
-    print("")
-    
-    # Resume safety
-    safety = checkpoint.get('resumeSafety', {})
-    if safety:
-        print("## Resume Safety")
-        print(f"Repo Changed: {safety.get('repoChanged', False)}")
-        print(f"Stale: {safety.get('stale', False)}")
-        print(f"Unresolved Risks: {safety.get('unresolvedRisks', False)}")
-        print(f"Destructive Next Action: {safety.get('destructiveNextAction', False)}")
-        print(f"Ambiguous Task: {safety.get('ambiguousTask', False)}")
-        print(f"Reasons: {safety.get('reasons', [])}")
-        print("")
-    
-    # Repo state
-    repo = checkpoint.get('repoState', {})
-    if repo:
-        print("## Repo State")
-        print(f"Branch: {repo.get('branch', 'unknown')}")
-        print(f"Commit: {repo.get('commit', 'unknown')}")
-        print(f"Dirty: {repo.get('dirty', True)}")
-        print("")
-    
-    print("== End Transport Payload ==")
-    
-except Exception as e:
-    print(f"Error loading transport payload: {e}")
-    sys.exit(1)
-PYEOF
-"$CHECKPOINT_FILE"
+    with open(config_file) as f:
+        config = json.load(f)
+except Exception:
+    sys.exit(0)
 
-echo ""
-echo "Transport complete. Evaluate resume safety and continue with next action."
+if not config.get("enabled", False):
+    sys.exit(0)
+
+# Restore mode from config — mode persists across /clear
+mode = config.get("mode", "")
+if mode not in ("compact", "pass"):
+    # Default: no mode active, don't inject anything
+    sys.exit(0)
+
+# Load or initialize runtime
+try:
+    with open(runtime_file) as f:
+        runtime = json.load(f)
+except Exception:
+    runtime = {}
+
+# Restore mode and ensure mutual exclusivity
+# Only one mode can be active at a time
+runtime["mode"] = mode
+runtime["enabled"] = True
+
+# Reset per-session transient fields
+runtime["monitor_pid"] = None
+runtime["needs_resume"] = True
+runtime["resume_reason"] = runtime.get("resume_reason") or "post_clear"
+
+# Write runtime
+os.makedirs(os.path.dirname(runtime_file), exist_ok=True)
+tmp = runtime_file + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(runtime, f, indent=2, sort_keys=True)
+os.replace(tmp, runtime_file)
+
+# Check if checkpoint exists for resume
+checkpoint = {}
+if os.path.exists(checkpoint_file):
+    try:
+        with open(checkpoint_file) as f:
+            checkpoint = json.load(f)
+    except Exception:
+        pass
+
+if not checkpoint:
+    sys.exit(0)
+
+# Opportunistic resume notice — NOT authoritative.
+# UserPromptSubmit is the real path.
+print("")
+print("--- Handshake SessionStart (opportunistic) ---")
+print(f"Mode: {mode}")
+print(f"Resume reason: {runtime.get('resume_reason', 'unknown')}")
+print(f"Checkpoint: .claude/handshake/checkpoint.json")
+print("For guaranteed resume, type any prompt or run /handshake resume.")
+print("---")
+print("")
+
+PYEOF
+
 exit 0

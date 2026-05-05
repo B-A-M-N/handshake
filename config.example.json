@@ -1,7 +1,7 @@
 {
   "enabled": false,
-  "checkpointThreshold": 0,
+  "mode": "compact",
   "stalenessHours": 24,
-  "lastCheckpoint": null,
-  "transportVersion": "2.0"
+  "checkpointPath": ".claude/handshake/checkpoint.json",
+  "markdownPath": ".claude/handshake/checkpoint.md"
 }

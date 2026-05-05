@@ -1,12 +1,26 @@
 {
   "name": "handshake",
-  "version": "0.1.0",
-  "description": "Context-continuity plugin that checkpoints agent state before compaction or /clear, and rehydrates after context reset for seamless workflow resumption.",
+  "version": "0.3.0",
+  "description": "Context-continuity plugin that maintains durable checkpoints and resumes through the next prompt or explicit /handshake resume. Does not rely on SessionStart rehydration.",
   "author": {
     "name": "bamn",
     "email": "bamn@users.noreply.github.com"
   },
   "license": "MIT",
   "keywords": ["context", "continuity", "checkpoint", "resume", "workflow"],
-  "skills": "./skills"
+  "homepage": "https://github.com/bamn/handshake",
+  "monitors": [
+    {
+      "name": "handshake-checkpointer",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/handshake-monitor.py",
+      "description": "Maintains fresh Handshake checkpoints by distilling transcript + git state. Runs in compact mode.",
+      "when": "on-skill-invoke:handshake"
+    },
+    {
+      "name": "handshake-context-monitor",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/handshake-context-monitor.sh",
+      "description": "Warns when Claude Code context pressure crosses checkpoint thresholds (70/80/90/95%). Polls context.json written by the statusline sensor.",
+      "when": "on-skill-invoke:handshake"
+    }
+  ]
 }
